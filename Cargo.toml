@@ -13,7 +13,8 @@ categories = []
 
 [workspace]
 members = [
-    "crates/*"
+    "crates/*",
+    "xtask"
 ]
 
 [features]
