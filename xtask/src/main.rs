@@ -6,6 +6,7 @@ use release::release_command;
 use release::ReleaseType;
 
 mod release;
+mod utils;
 
 #[derive(Subcommand)]
 enum Command {
