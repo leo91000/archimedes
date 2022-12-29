@@ -30,6 +30,11 @@ pub fn release_command(release_type: ReleaseType) {
     let commits = parse_commits(env::current_dir().unwrap(), None).unwrap();
     dbg!(commits);
 
+    for package in packages {
+        let tags = get_tags(Some(&format!("{}@*", package.name)).unwrap();
+        let commits = parse_commits(package.path, None);
+    }
+
     // Input 1 : Update type (fix, minor, major, auto)
     // ====================================
     // 1. Dependency graph of workspaces
@@ -165,6 +170,24 @@ impl FromStr for CommitType {
 
         Ok(r)
     }
+}
+
+fn get_tags(pattern: Option<&str>) -> anyhow::Result<Vec<String>> {
+    let mut cmd = Command::new("git");
+    cmd.arg("--no-pager").arg("tag").arg("-l");
+
+    if let Some(pattern) = pattern {
+        cmd.arg(pattern);
+    }
+
+    cmd.arg("--sort=creatordate");
+
+    let output = cmd.stdout(Stdio::piped()).output()?;
+    let stdout: String = String::from_utf8(output.stdout)?;
+
+    let result = stdout.lines().map(|l| l.trim().to_string()).collect();
+
+    Ok(result)
 }
 
 // https://www.conventionalcommits.org/en/v1.0.0/
