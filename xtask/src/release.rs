@@ -17,7 +17,7 @@ use crate::utils::StringUtils;
 
 #[derive(ValueEnum, Clone, Display)]
 pub enum ReleaseType {
-    Fix,
+    Patch,
     Minor,
     Major,
     Auto,
@@ -26,13 +26,17 @@ pub enum ReleaseType {
 pub fn release_command(release_type: ReleaseType) {
     println!("Release {release_type}");
     let packages = parse_packages();
-    dbg!(packages);
-    let commits = parse_commits(env::current_dir().unwrap(), None).unwrap();
-    dbg!(commits);
+    dbg!(&packages);
 
     for package in packages {
-        let tags = get_tags(Some(&format!("{}@*", package.name)).unwrap();
-        let commits = parse_commits(package.path, None);
+        let package_name = &package.name;
+        let tags = get_tags(Some(&format!("{package_name}@*"))).expect("Failed to find git tags");
+        let commits = parse_commits(package.path, tags.get(0)).expect("Failed to parse commits");
+
+        let release_type = FixedReleaseType::from_commits(&release_type, &commits);
+        // Generate CHANGELOG
+        // If no changelog put changelog in a new file
+        // Else append changelog to the top
     }
 
     // Input 1 : Update type (fix, minor, major, auto)
@@ -134,7 +138,7 @@ strike! {
         message: String,
         description: String,
         short_hash: String,
-        change_type: enum CommitType {
+        change_type: #[derive(PartialEq, Eq)] enum CommitType {
             Fix,
             Feat,
             Chore,
@@ -201,7 +205,7 @@ const CO_AUTHORED_BY_RE: Lazy<Regex> =
 const PR_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\([a-z ]*(#[0-9]+)\\s*\\)").unwrap());
 const ISSUE_RE: Lazy<Regex> = Lazy::new(|| Regex::new("(#[0-9]+)").unwrap());
 
-fn parse_commits(dir: PathBuf, from: Option<String>) -> anyhow::Result<Vec<Commit>> {
+fn parse_commits(dir: PathBuf, from: Option<&String>) -> anyhow::Result<Vec<Commit>> {
     let mut cmd = Command::new("git");
     cmd.arg("--no-pager").arg("log");
 
@@ -246,7 +250,7 @@ fn parse_commits(dir: PathBuf, from: Option<String>) -> anyhow::Result<Vec<Commi
                 })
                 .chain((*ISSUE_RE).captures_iter(description).filter_map(|cap| {
                     Some(CommitReference {
-                        ref_type: CommitReferenceType::PullRequest,
+                        ref_type: CommitReferenceType::Issue,
                         value: cap.get(1)?.as_str().into(),
                     })
                 }))
@@ -293,4 +297,29 @@ fn parse_commits(dir: PathBuf, from: Option<String>) -> anyhow::Result<Vec<Commi
         .collect::<Vec<_>>();
 
     Ok(commits)
+}
+
+enum FixedReleaseType {
+    Patch,
+    Minor,
+    Major,
+}
+
+impl FixedReleaseType {
+    fn from_commits(release_type: &ReleaseType, commits: &[Commit]) -> Self {
+        match release_type {
+            ReleaseType::Patch => FixedReleaseType::Patch,
+            ReleaseType::Minor => FixedReleaseType::Minor,
+            ReleaseType::Major => FixedReleaseType::Major,
+            ReleaseType::Auto => {
+                if commits.iter().any(|c| c.breaking_change) {
+                    FixedReleaseType::Major
+                } else if commits.iter().any(|c| c.change_type == CommitType::Feat) {
+                    FixedReleaseType::Minor
+                } else {
+                    FixedReleaseType::Patch
+                }
+            }
+        }
+    }
 }
